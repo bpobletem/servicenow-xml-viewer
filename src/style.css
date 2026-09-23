@@ -10,7 +10,43 @@
   --logic: #f0b866;
   --danger: #ff8b8b;
   --radius: 10px;
+
+  /* resaltado de sintaxis — pensados sobre el fondo #0b0f19 de los bloques de código */
+  --syn-comment: #5f6d8a;
+  --syn-string: #9ede9f;
+  --syn-number: #f0b866;
+  --syn-literal: #f0b866;
+  --syn-keyword: #c79bf0;
+  --syn-global: #7ee0c0;
+  --syn-func: #62b6ff;
+  --syn-prop: #c3d0e8;
+  --syn-punct: #8492ae;
+  --syn-regex: #f2a0c0;
+  --syn-tag: #62b6ff;
+  --syn-attr: #7ee0c0;
+  --syn-key: #62b6ff;
+
   color-scheme: dark;
+}
+
+/* Un span por token; las clases son globales porque los pintan varios componentes. */
+.t-comment { color: var(--syn-comment); font-style: italic; }
+.t-string { color: var(--syn-string); }
+.t-number { color: var(--syn-number); }
+.t-literal { color: var(--syn-literal); }
+.t-keyword { color: var(--syn-keyword); }
+.t-global { color: var(--syn-global); }
+.t-func { color: var(--syn-func); }
+.t-prop { color: var(--syn-prop); }
+.t-punct { color: var(--syn-punct); }
+.t-regex { color: var(--syn-regex); }
+.t-tag { color: var(--syn-tag); }
+.t-attr { color: var(--syn-attr); }
+.t-key { color: var(--syn-key); }
+/* las expresiones {{...}} de ServiceNow se ven igual dentro y fuera del código */
+.t-pill {
+  color: var(--accent); background: rgba(98, 182, 255, .12);
+  border-radius: 4px; padding: 0 2px;
 }
 
 * { box-sizing: border-box; }
