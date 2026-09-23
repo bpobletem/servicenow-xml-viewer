@@ -19,11 +19,19 @@ Todo el procesamiento ocurre en el navegador: no hay backend, ni base de datos, 
 
 - **Detección automática** del formato: `<unload>` con varios `<sys_update_xml>` (update set),
   `<record_update>` suelto o un export directo de la tabla.
+- **Update sets**: nombre, descripción y estado del set, y el listado de todos los registros
+  que toca —con su tabla, tipo, autor, fecha y si fue alta/modificación o borrado—, agrupable
+  por tipo o por autor. Cada fila abre el registro con su vista completa: si es una action,
+  sus steps; si es un flow, su diagrama.
 - **Flows y subflows** (`sys_hub_flow`): trigger con su tabla y condición, acciones en orden,
   ramas anidadas (If, For Each…) e inputs de cada acción con sus pills de datos `{{...}}`.
 - **Diagrama del flow**: vista vertical del orden de ejecución con los bloques anidados.
 - **Actions** (`sys_hub_action_type_definition`): inputs, outputs y cada step con sus valores;
   los scripts se muestran completos y se pueden copiar.
+- **Colores de sintaxis y numeración de líneas** en todo el código: JavaScript (con los
+  globales de ServiceNow —`gs`, `current`, `inputs`, `GlideRecord`…— resaltados aparte),
+  JSON y XML, tanto en la vista de detalle como en el diff línea a línea. Los números no
+  se copian con el código. Sin dependencias: el resaltador es `src/lib/highlight.js`.
 - **Cualquier otra tabla**: tabla de campos legible, con scripts y JSON formateados y
   referencias por `sys_id` navegables cuando el registro apuntado viene en el mismo XML.
 
