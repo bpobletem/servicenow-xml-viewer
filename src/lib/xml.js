@@ -24,6 +24,21 @@ function fieldsOf(el) {
   return fields
 }
 
+/**
+ * Los campos de referencia llevan el nombre legible en display_value. Para los nodos de
+ * un flow eso es lo único que identifica el tipo de acción ("Update Record", "If"): el
+ * registro apuntado pertenece al step type y no viaja en el export.
+ */
+function displaysOf(el) {
+  const out = {}
+  for (const child of Array.from(el.children)) {
+    if (child.children.length) continue
+    const dv = child.getAttribute('display_value')
+    if (dv) out[child.tagName] = dv
+  }
+  return out
+}
+
 // Un elemento "registro" es una tabla: todos sus hijos son campos hoja.
 function isRecordElement(el) {
   if (!el.children.length) return false
@@ -37,6 +52,7 @@ function makeRecord(el, ctx) {
     table: el.tagName,
     action: el.getAttribute('action') || '',
     fields,
+    displays: displaysOf(el),
     sysId: fields.sys_id || '',
     // el <record_update table="x"> marca cuál es el registro principal del bloque;
     // el resto son registros relacionados que viajan con él.

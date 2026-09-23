@@ -5,6 +5,7 @@ import FieldTable from './FieldTable.vue'
 import FlowDiagram from './FlowDiagram.vue'
 import ValueCell from './ValueCell.vue'
 import Collapsible from './Collapsible.vue'
+import EmptyDiagnostics from './EmptyDiagnostics.vue'
 import { displayName } from '../lib/model.js'
 import { provideCollapse } from '../lib/collapse.js'
 
@@ -86,10 +87,11 @@ function ioType(r) {
       </Collapsible>
 
       <Collapsible title="Acciones" :count="item.nodeCount">
-        <div v-if="!item.tree.length" class="muted warn">
-          Este XML contiene el registro del flow pero no sus action instances.
-          Carga el update set completo (o el XML que incluye los registros relacionados) para ver los pasos.
-        </div>
+        <EmptyDiagnostics
+          v-if="!item.tree.length"
+          :diagnostics="item.diagnostics"
+          what="Este XML contiene el registro del flow pero no se encontraron sus action instances."
+        />
         <NodeCard
           v-for="(n, i) in item.tree"
           :key="n.sysId || i"
@@ -133,9 +135,11 @@ function ioType(r) {
       </div>
 
       <Collapsible title="Steps" :count="item.stepCount">
-        <div v-if="!item.steps.length" class="muted warn">
-          No se encontraron steps en este XML. Carga el update set completo de la action.
-        </div>
+        <EmptyDiagnostics
+          v-if="!item.steps.length"
+          :diagnostics="item.diagnostics"
+          what="No se encontraron steps para esta action."
+        />
         <NodeCard
           v-for="(n, i) in item.steps"
           :key="n.sysId || i"

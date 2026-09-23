@@ -62,7 +62,7 @@ const [a, b] = await Promise.all([
   fetch('/__a.xml').then(r => r.text()),
   fetch('/__b.xml').then(r => r.text())
 ]);
-const ma = buildModel(a), mb = buildModel(b);
+const ma = await buildModel(a), mb = await buildModel(b);  // buildModel es async: descomprime los campos gzip
 ({
   records: [ma.records.length, mb.records.length],
   roots:   [ma.roots.map(r => r.table + ':' + r.title), mb.roots.map(r => r.table + ':' + r.title)],

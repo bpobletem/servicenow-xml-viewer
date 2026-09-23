@@ -152,3 +152,33 @@ uses `sys_hub_step`, while real exports use `sys_hub_step_instance`. Use the `sn
 skill to pull the user's real XMLs out of the session transcript and run the model headlessly
 in the browser pane. A change that looks right on the sample and wrong on real data is the
 normal failure mode here, not the exception.
+
+## Rule 7 — Never match on table names for flow internals
+
+Instances live in versioned tables (`sys_hub_action_instance` vs `sys_hub_action_instance_v2`,
+and whatever comes next). A hardcoded list breaks on the next instance you meet. Detect by shape:
+
+- **Node**: any record whose `flow` / `parent_flow` equals the flow's `sys_id` **and** that has
+  an `order` field.
+- **Trigger**: same link, table matching `/trigger/i`.
+- **Nesting**: `parent_ui_id` → `ui_id` (UUIDs with dashes, *not* sys_ids). Fall back to
+  `parent` / `block` for older exports. The `block` field often holds an unrelated sys_id.
+
+`sys_hub_flow_snapshot` carries a full duplicate of every instance, linked to the *snapshot's*
+sys_id instead of the flow's — the `flow === flow.sysId` test excludes it for free.
+
+## Rule 8 — The step type name only exists in `display_value`
+
+The record behind `action_type` / `logic_definition` / `subflow` does not travel in the export.
+Its human name ("Update Record", "If", "Set Flow Variables") is in the `display_value` attribute
+of the reference element, so the parser must keep attributes, not just text content.
+`comment` holds the developer's own label for the step.
+
+## Rule 9 — `values` is gzip, base64, and three different shapes
+
+Node inputs arrive base64-encoded gzip (starts with `H4sI`). Inflate with
+`DecompressionStream('gzip')` before anything else — which forces `buildModel` to be async.
+The JSON inside is either a list of `{name, value, displayValue, parameter:{label}}`, or an
+object wrapping that list under `inputs` alongside empty engine collections
+(`dynamicInputs`, `outputsToAssign`…) that are pure noise. Use `parameter.label` for the
+display name. Values reference other steps as `{{<ui_id>.<output>}}`; substitute the step name.

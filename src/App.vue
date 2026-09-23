@@ -83,8 +83,8 @@ function visibleEntries(list) {
 }
 
 /* ------------------------------------------------------------- acciones */
-function parse(text, which) {
-  const model = buildModel(text)
+async function parse(text, which) {
+  const model = await buildModel(text)
   if (which === 'a') {
     modelA.value = model
     adHoc.value = null
@@ -100,12 +100,12 @@ function parse(text, which) {
   return model
 }
 
-function analyze() {
+async function analyze() {
   error.value = ''
   try {
     if (!xmlA.value.trim()) { error.value = 'Falta el XML principal.'; return }
-    parse(xmlA.value, 'a')
-    if (dual.value && xmlB.value.trim()) parse(xmlB.value, 'b')
+    await parse(xmlA.value, 'a')
+    if (dual.value && xmlB.value.trim()) await parse(xmlB.value, 'b')
     selectedKey.value = ''
   } catch (e) {
     modelA.value = null
@@ -114,11 +114,11 @@ function analyze() {
   }
 }
 
-function compareNow() {
+async function compareNow() {
   error.value = ''
   try {
     if (!xmlB.value.trim()) { error.value = 'Pega o sube el XML con el que quieres comparar.'; return }
-    parse(xmlB.value, 'b')
+    await parse(xmlB.value, 'b')
     selectedKey.value = ''
     compareModal.value = false
   } catch (e) {
@@ -156,14 +156,14 @@ function select(item) { adHoc.value = null; showSet.value = false; selectedId.va
 function readFile(file, which) {
   if (!file) return
   const reader = new FileReader()
-  reader.onload = () => {
+  reader.onload = async () => {
     const text = String(reader.result)
     if (which === 'a') { xmlA.value = text; nameA.value = file.name }
     else { xmlB.value = text; nameB.value = file.name }
     error.value = ''
     try {
-      if (which === 'a') { parse(text, 'a'); selectedKey.value = '' }
-      else if (modelA.value) { parse(text, 'b'); selectedKey.value = ''; compareModal.value = false }
+      if (which === 'a') { await parse(text, 'a'); selectedKey.value = '' }
+      else if (modelA.value) { await parse(text, 'b'); selectedKey.value = ''; compareModal.value = false }
     } catch (e) { error.value = e.message }
   }
   reader.readAsText(file)

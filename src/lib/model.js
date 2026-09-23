@@ -1,4 +1,5 @@
 import { extractDocument, isSysId } from './xml.js'
+import { inflateRecords } from './inflate.js'
 import { tableInfo } from './tables.js'
 
 const SYSTEM_FIELDS = new Set([
@@ -15,11 +16,14 @@ const METADATA_TABLES = new Set([
   'sys_element_mapping'
 ])
 
-const NODE_TABLES = ['sys_hub_action_instance', 'sys_hub_flow_logic', 'sys_hub_flow_block']
 
-export function buildModel(text) {
+export async function buildModel(text) {
   const doc = extractDocument(text)
   const records = doc.records.map((r, i) => ({ ...r, id: 'r' + i, info: tableInfo(r.table) }))
+
+  // los inputs de los nodos de un flow viajan en gzip+base64: hay que expandirlos antes
+  // de construir nada, porque el resto del modelo asume texto plano.
+  await inflateRecords(records)
 
   const bySysId = new Map()
   for (const r of records) if (r.sysId && !bySysId.has(r.sysId)) bySysId.set(r.sysId, r)
@@ -257,19 +261,50 @@ export function inputsFor(record, model) {
     seen.add(name)
   }
 
-  const json = tryJson(record.fields.values || record.fields.inputs || '')
-  if (json && !Array.isArray(json)) {
-    for (const [name, value] of Object.entries(json)) {
-      if (seen.has(name)) continue
-      out.push({
-        name,
-        value: typeof value === 'string' ? value : JSON.stringify(value, null, 2),
-        origin: 'values',
-        record: null
-      })
-    }
+  for (const item of valueEntries(record.fields.values || record.fields.inputs || '')) {
+    if (seen.has(item.name)) continue
+    out.push({ ...item, origin: 'values', record: null })
+    seen.add(item.name)
   }
   return out.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/**
+ * El campo `values` de un nodo no tiene una única forma: unas veces es una lista de inputs,
+ * otras un objeto que envuelve esa lista junto a colecciones internas del motor
+ * (dynamicInputs, outputsToAssign…). Se normaliza todo a pares nombre/valor y se descartan
+ * las colecciones vacías, que sólo son ruido en pantalla.
+ */
+function valueEntries(raw) {
+  const json = tryJson(raw)
+  if (!json || typeof json !== 'object') return []
+
+  if (Array.isArray(json)) {
+    const out = []
+    for (const item of json) {
+      if (!item || typeof item !== 'object') continue
+      const name = (item.parameter && item.parameter.label) || item.name
+      const value = item.displayValue || item.value
+      if (!name || value == null || value === '') continue
+      out.push({ name, value: typeof value === 'string' ? value : JSON.stringify(value, null, 2) })
+    }
+    return out
+  }
+
+  const out = []
+  for (const [name, value] of Object.entries(json)) {
+    if (value == null || value === '') continue
+    if (Array.isArray(value)) {
+      if (!value.length) continue
+      // una lista de inputs anidada se despliega en vez de mostrarse como JSON crudo
+      const nested = valueEntries(JSON.stringify(value))
+      if (nested.length) out.push(...nested)
+      else out.push({ name, value: JSON.stringify(value, null, 2) })
+      continue
+    }
+    out.push({ name, value: typeof value === 'string' ? value : JSON.stringify(value, null, 2) })
+  }
+  return out
 }
 
 // La definición de la variable (var_dictionary) vive en el step type y no viaja en
@@ -300,15 +335,39 @@ function childrenOf(record, model, tables) {
 
 /* ------------------------------------------------------------------ flows */
 
+/**
+ * Evidencia para cuando un flow o una action se ven vacíos. Sin esto el mensaje de
+ * "no se encontraron pasos" es indistinguible de un export incompleto, de un enlace por
+ * un campo que no conocemos y de un bug nuestro.
+ */
+function diagnose(record, model) {
+  const refs = {}
+  for (const { record: r, field } of model.refs.get(record.sysId) || []) {
+    const key = r.table + ' · ' + field
+    refs[key] = (refs[key] || 0) + 1
+  }
+  const tables = {}
+  for (const r of model.records) tables[r.table] = (tables[r.table] || 0) + 1
+  return {
+    refs: Object.entries(refs).sort((a, b) => b[1] - a[1]),
+    tables: Object.entries(tables).sort((a, b) => b[1] - a[1]),
+    total: model.records.length
+  }
+}
+
 function buildFlow(flow, model) {
   const consumed = new Set([flow.id])
   const isSub = (flow.fields.type || '').toLowerCase().includes('subflow')
 
-  const all = model.records.filter(
-    (r) => NODE_TABLES.includes(r.table) && (r.fields.flow === flow.sysId || r.fields.parent_flow === flow.sysId)
+  // Los nodos se reconocen por su forma, no por su tabla: cualquier registro que apunte
+  // al flow y lleve un `order` es un paso de la secuencia. Así funciona igual con las
+  // tablas clásicas (sys_hub_action_instance) que con las versionadas (…_v2) o futuras.
+  const linked = model.records.filter(
+    (r) => r !== flow && (r.fields.flow === flow.sysId || r.fields.parent_flow === flow.sysId)
   )
-  const triggers = model.records
-    .filter((r) => r.table === 'sys_hub_trigger_instance' && r.fields.flow === flow.sysId)
+  const all = linked.filter((r) => !isTriggerish(r) && 'order' in r.fields)
+  const triggers = linked
+    .filter(isTriggerish)
     .map((r) => {
       consumed.add(r.id)
       return { record: r, title: displayName(r), inputs: collectInputs(r, model, consumed) }
@@ -317,17 +376,23 @@ function buildFlow(flow, model) {
   const nodeMap = new Map()
   for (const r of all) {
     consumed.add(r.id)
-    nodeMap.set(r.sysId, makeNode(r, model, consumed))
+    const node = makeNode(r, model, consumed)
+    nodeMap.set(r.sysId, node)
+    // el anidamiento puede venir por un id de UI propio del flow en vez del sys_id
+    if (r.fields.ui_id) nodeMap.set(r.fields.ui_id, node)
   }
 
   const tree = []
-  for (const node of nodeMap.values()) {
-    const parentId = firstRef(node.record.fields, ['parent', 'parent_instance', 'block', 'flow_block'])
+  for (const node of new Set(nodeMap.values())) {
+    const parentId = firstRef(node.record.fields, [
+      'parent_ui_id', 'parent', 'parent_instance', 'block', 'flow_block'
+    ])
     const parent = parentId && parentId !== flow.sysId ? nodeMap.get(parentId) : null
     if (parent && parent !== node) parent.children.push(node)
     else tree.push(node)
   }
   sortTree(tree)
+  resolvePills(tree)
 
   const inputs = childrenOf(flow, model, ['sys_hub_flow_input'])
   const outputs = childrenOf(flow, model, ['sys_hub_flow_output'])
@@ -344,33 +409,88 @@ function buildFlow(flow, model) {
     ...flow,
     view: 'flow',
     related: relatedFlow,
+    diagnostics: diagnose(flow, model),
     kindLabel: isSub ? 'Subflow' : 'Flow',
     triggers,
     tree,
-    nodeCount: nodeMap.size,
+    nodeCount: all.length,
     flowInputs: inputs.map((r) => ({ record: r, title: displayName(r) })),
     flowOutputs: outputs.map((r) => ({ record: r, title: displayName(r) })),
     consumedIds: [...consumed]
   }
 }
 
+// Acepta tanto sys_ids como los identificadores con guiones que usa el editor de flows.
+/**
+ * Los valores de un input referencian la salida de otro paso por su id de UI
+ * ({{5ff054f4-….v_customer_order}}). En el editor eso se ve con el nombre del paso, así
+ * que se hace la misma sustitución para que el valor se pueda leer.
+ */
+function resolvePills(tree) {
+  const names = new Map()
+  const collect = (nodes) => {
+    for (const n of nodes) {
+      const ui = n.record.fields.ui_id
+      if (ui) names.set(ui, n.typeName || n.title)
+      collect(n.children)
+    }
+  }
+  collect(tree)
+  if (!names.size) return
+
+  const apply = (nodes) => {
+    for (const n of nodes) {
+      for (const input of n.inputs) {
+        if (typeof input.value !== 'string' || !input.value.includes('{{')) continue
+        input.value = input.value.replace(/\{\{([0-9a-f-]{32,36})/gi, (m, id) =>
+          names.has(id) ? '{{' + names.get(id) : m
+        )
+      }
+      apply(n.children)
+    }
+  }
+  apply(tree)
+}
+
 function firstRef(fields, names) {
   for (const n of names) {
     const v = (fields[n] || '').trim()
-    if (isSysId(v)) return v
+    if (isSysId(v) || /^[0-9a-f-]{32,36}$/i.test(v)) return v
   }
   return ''
 }
 
+// Un disparador es lo que apunta al flow desde una tabla de triggers, sea cual sea su nombre.
+function isTriggerish(record) {
+  return /trigger/i.test(record.table)
+}
+
+const TYPE_FIELDS = ['action_type', 'logic_definition', 'flow_logic', 'subflow', 'step_type', 'type']
+
+/**
+ * El nombre del tipo de paso ("Update Record", "If") vive en un registro que no viaja en
+ * el export. ServiceNow lo deja en el atributo display_value del campo de referencia, así
+ * que se usa eso antes de intentar resolver el sys_id contra el propio XML.
+ */
+function typeLabel(record, model) {
+  for (const f of TYPE_FIELDS) {
+    if (record.displays && record.displays[f]) return record.displays[f]
+  }
+  const ref = refLabel(firstRef(record.fields, TYPE_FIELDS), model)
+  return ref ? ref.label : ''
+}
+
 function makeNode(record, model, consumed) {
-  const typeRef = refLabel(firstRef(record.fields, ['action_type', 'flow_logic', 'step_type', 'type']), model)
+  const type = typeLabel(record, model)
   const inputs = collectInputs(record, model, consumed)
-  const logic = record.table === 'sys_hub_flow_logic' || record.table === 'sys_hub_flow_block'
+  const named = record.fields.label || record.fields.name
+  const logic = /logic|block/i.test(record.table)
   return {
     record,
     sysId: record.sysId,
-    title: displayName(record),
-    typeName: typeRef ? typeRef.label : '',
+    // el comentario es la etiqueta que el desarrollador le puso al paso en el editor
+    title: named || type || record.fields.comment || displayName(record),
+    typeName: named && type ? type : record.fields.comment || '',
     table: record.table,
     order: num(record.fields.order),
     isLogic: logic,
@@ -441,6 +561,7 @@ function buildAction(action, model) {
     ...action,
     view: 'action',
     related,
+    diagnostics: diagnose(action, model),
     kindLabel: 'Action',
     steps,
     stepCount: stepMap.size,
