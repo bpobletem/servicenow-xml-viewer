@@ -1,4 +1,4 @@
-import { extractRecords, isSysId } from './xml.js'
+import { extractDocument, isSysId } from './xml.js'
 import { tableInfo } from './tables.js'
 
 const SYSTEM_FIELDS = new Set([
@@ -18,7 +18,8 @@ const METADATA_TABLES = new Set([
 const NODE_TABLES = ['sys_hub_action_instance', 'sys_hub_flow_logic', 'sys_hub_flow_block']
 
 export function buildModel(text) {
-  const records = extractRecords(text).map((r, i) => ({ ...r, id: 'r' + i, info: tableInfo(r.table) }))
+  const doc = extractDocument(text)
+  const records = doc.records.map((r, i) => ({ ...r, id: 'r' + i, info: tableInfo(r.table) }))
 
   const bySysId = new Map()
   for (const r of records) if (r.sysId && !bySysId.has(r.sysId)) bySysId.set(r.sysId, r)
@@ -46,7 +47,64 @@ export function buildModel(text) {
     (r) => !rootIds.has(r.id) && !claimed.has(r.id) && !METADATA_TABLES.has(r.table)
   )
 
-  return { ...model, roots, orphans }
+  const updateSet = buildUpdateSet(doc, records, roots)
+
+  // lo que ya se lista como entrada del update set no vuelve a aparecer como suelto
+  if (updateSet && !updateSet.entriesMissing) {
+    const listed = new Set(updateSet.entries.map((e) => e.recordId).filter(Boolean))
+    return { ...model, roots, orphans: orphans.filter((r) => !listed.has(r.id)), updateSet }
+  }
+
+  return { ...model, roots, orphans, updateSet }
+}
+
+/**
+ * Un update set es una lista de registros tocados. Cada <sys_update_xml> aporta el
+ * "qué, quién y cuándo" y su payload aporta el registro en sí; aquí se vuelven a juntar
+ * para poder listar el update set completo y abrir cualquier entrada con su vista normal.
+ */
+function buildUpdateSet(doc, records, roots) {
+  if (!doc.entries.length && !doc.set) return null
+
+  const rootById = new Map(roots.map((r) => [r.id, r]))
+  const entries = doc.entries.map((entry) => {
+    const own = entry.recordIndexes.map((i) => records[i]).filter(Boolean)
+    const main = own.find((r) => r.primary) || own[0] || null
+    const root = main ? rootById.get(main.id) || null : null
+    const target = root || main
+    return {
+      ...entry,
+      record: main,
+      root,
+      recordId: main ? main.id : '',
+      table: entry.table || (main ? main.table : ''),
+      title: entry.targetName || (target ? displayName(target) : entry.name),
+      info: tableInfo(entry.table || (main ? main.table : '')),
+      view: root ? root.view : 'generic',
+      // cuántos registros relacionados viajaron con el principal: da una idea de si el
+      // export trae la action completa o sólo su cabecera
+      relatedCount: Math.max(own.length - 1, 0),
+      detail: root && root.view === 'action' ? root.stepCount + ' steps'
+        : root && root.view === 'flow' ? root.nodeCount + ' acciones'
+        : ''
+    }
+  })
+
+  const setFields = (doc.set && doc.set.fields) || {}
+  return {
+    record: doc.set,
+    // Un export hecho con "Export > XML" sobre la fila del update set trae la cabecera y
+    // nada más. Es un error fácil de cometer y el síntoma (una pantalla casi vacía) no
+    // explica nada por sí solo, así que lo detectamos para poder decirlo.
+    entriesMissing: !doc.entries.length,
+    name: setFields.name || '',
+    description: setFields.description || '',
+    state: setFields.state || '',
+    application: setFields.application || '',
+    createdBy: setFields.sys_created_by || '',
+    createdOn: setFields.sys_created_on || '',
+    entries
+  }
 }
 
 /**
@@ -91,12 +149,33 @@ function expandConsumed(consumed, model) {
 function decorate(record, model) {
   const base = {
     ...record,
-    title: displayName(record),
+    // una entrada sin payload (un DELETE, o un payload roto) sólo conoce su target_name
+    title: record.placeholder ? (record.source.targetName || displayName(record)) : displayName(record),
     consumedIds: [record.id]
   }
+  if (record.placeholder) return { ...base, ...genericView(record) }
   if (record.table === 'sys_hub_flow') return buildFlow(base, model)
   if (record.table.startsWith('sys_hub_action_type')) return buildAction(base, model)
   return { ...base, view: 'generic' }
+}
+
+/**
+ * Cómo se presenta un registro cuando no tiene vista propia. Vive aquí (y no en el
+ * componente) para que abrirlo desde la lista del update set y abrirlo desde el modelo
+ * den exactamente el mismo título y la misma etiqueta.
+ */
+export function genericView(record) {
+  const info = tableInfo(record.table)
+  const deleted = record.placeholder && record.action === 'DELETE'
+  return {
+    view: 'generic',
+    info,
+    title: record.placeholder
+      ? (record.source.targetName || record.fields.target_name || displayName(record))
+      : displayName(record),
+    kindLabel: deleted ? 'Eliminado' : info.label,
+    deleted
+  }
 }
 
 /* ---------------------------------------------------------------- helpers */

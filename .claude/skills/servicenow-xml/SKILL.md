@@ -50,12 +50,45 @@ name — so it looked like a broken diff rather than a wrong record.
 If you ever need to relax this, relax it *forward* (fall back to the old heuristic when no
 record is primary, which `pickRoots` already does) rather than removing it.
 
+## Rule 1b — the entry wrapper carries information the payload does not
+
+`<sys_update_xml>` is not just an envelope. Who touched the record, when, whether it was an
+insert or a `DELETE`, and ServiceNow's own type label ("Business Rule", "Flow Designer
+Action") exist **only** there — unwrap the payload and that context is gone. `makeEntry` in
+`xml.js` keeps it, and `buildUpdateSet` in `model.js` rejoins each entry with the record its
+payload produced.
+
+A `DELETE` entry has no payload at all. It still represents something the update set touched,
+so the parser emits a placeholder record for it rather than dropping the entry — otherwise a
+deletion is invisible, which is the one change you most want to notice when reviewing a set.
+
+## Rule 1c — "Export > XML" on an update set does not export the update set
+
+Right-clicking an update set record and choosing *Export > XML* exports **only that row** —
+one `<sys_update_set>` element and nothing else. No entries, no payloads. The user gets a file
+that looks like an update set export and contains none of the content.
+
+The entries live in `sys_update_xml`. The two ways to get them:
+
+- Mark the set **Complete**, then use the **Export to XML** UI action on the form (the button
+  only appears once the set is complete).
+- Or, without completing it: open the **Customer Updates** related list on the update set
+  form, select all rows, right-click the header → *Export → XML*.
+
+`buildUpdateSet` flags this case as `entriesMissing` so the UI can explain it. Detecting it
+matters because the symptom — a nearly empty screen, or one record with a name and a
+description — looks like a parser bug and is not one.
+
 ## Rule 2 — a record can appear twice in one export
 
 Exports sometimes end with a second, partial copy of a record carrying only `sys_id` and a
 couple of fields (`latest_snapshot`, `compiler_build`). `mergeDuplicates` in `xml.js` folds
 records with the same `table` + `sys_id` into one, preferring non-empty values, so the user
 does not see a phantom second entry with almost no fields.
+
+Merging is scoped **per update-set entry**. Two entries can touch the same `sys_id` at
+different times, and merging across them invents a record that never existed while making one
+of the two entries vanish from the listing.
 
 ## Rule 3 — a reverse-reference index yields a record once per referencing field
 

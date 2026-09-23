@@ -2,9 +2,9 @@
 import { ref, computed, shallowRef } from 'vue'
 import RecordDetail from './components/RecordDetail.vue'
 import RecordDiff from './components/RecordDiff.vue'
-import { buildModel, displayName } from './lib/model.js'
+import UpdateSetView from './components/UpdateSetView.vue'
+import { buildModel, genericView } from './lib/model.js'
 import { buildComparison } from './lib/diff.js'
-import { tableInfo } from './lib/tables.js'
 import { SAMPLE_XML, SAMPLE_XML_V2 } from './lib/sample.js'
 
 /* ---------------------------------------------------------------- estado */
@@ -28,6 +28,21 @@ const onlyChanges = ref(true)
 const showOthers = ref(false)
 
 const comparing = computed(() => !!(modelA.value && modelB.value))
+
+/* --------------------------------------------------------- update set */
+// Un update set no es un registro más: es la lista de lo que se tocó. Cuando el XML lo
+// trae, esa lista es la pantalla de entrada y cada fila abre la vista normal del registro.
+const updateSet = computed(() => (modelA.value ? modelA.value.updateSet : null))
+const showSet = ref(false)
+const filteredEntries = computed(() =>
+  updateSet.value ? matches(updateSet.value.entries, (e) => [e.title, e.table, e.type, e.updatedBy]) : []
+)
+
+function openEntry(entry) {
+  showSet.value = false
+  if (entry.root) { adHoc.value = null; selectedId.value = entry.root.id; return }
+  if (entry.record) openRecord(entry.record)
+}
 
 /* ------------------------------------------------------------- explorar */
 const roots = computed(() => (modelA.value ? modelA.value.roots : []))
@@ -73,8 +88,12 @@ function parse(text, which) {
   if (which === 'a') {
     modelA.value = model
     adHoc.value = null
+    showSet.value = !!model.updateSet
     selectedId.value = model.roots[0] ? model.roots[0].id : ''
-    if (!model.roots.length && model.orphans.length) { showOthers.value = true; openRecord(model.orphans[0]) }
+    if (!model.updateSet && !model.roots.length && model.orphans.length) {
+      showOthers.value = true
+      openRecord(model.orphans[0])
+    }
   } else {
     modelB.value = model
   }
@@ -126,13 +145,13 @@ function swapSides() {
 }
 
 function openRecord(record) {
+  showSet.value = false
   const root = roots.value.find((r) => r.id === record.id)
   if (root) { adHoc.value = null; selectedId.value = root.id; return }
-  const info = tableInfo(record.table)
-  adHoc.value = { ...record, view: 'generic', title: displayName(record), info, kindLabel: info.label }
+  adHoc.value = { ...record, ...genericView(record) }
 }
 
-function select(item) { adHoc.value = null; selectedId.value = item.id }
+function select(item) { adHoc.value = null; showSet.value = false; selectedId.value = item.id }
 
 function readFile(file, which) {
   if (!file) return
@@ -179,7 +198,7 @@ function reset() {
   modelA.value = null; modelB.value = null
   nameA.value = 'XML A'; nameB.value = 'XML B'
   adHoc.value = null; selectedId.value = ''; selectedKey.value = ''
-  error.value = ''; dual.value = false
+  error.value = ''; dual.value = false; showSet.value = false
 }
 
 const statusDot = { changed: '●', added: '+', removed: '−', equal: '·' }
@@ -338,7 +357,41 @@ const statusDot = { changed: '●', added: '+', removed: '−', equal: '·' }
           </div>
         </template>
 
+        <template v-else-if="updateSet && !updateSet.entriesMissing">
+          <button class="ghost wide setbtn" :class="{ on: showSet }" @click="showSet = true">
+            📦 {{ updateSet.name || 'Update set' }}
+            <span class="n">{{ updateSet.entries.length }}</span>
+          </button>
+          <div class="count muted">{{ filteredEntries.length }} de {{ updateSet.entries.length }} registros tocados</div>
+          <ul class="list">
+            <li
+              v-for="e in filteredEntries"
+              :key="e.id"
+              :class="{ on: !showSet && current && e.recordId === current.id }"
+              @click="openEntry(e)"
+            >
+              <span class="ic">{{ e.info.icon }}</span>
+              <span class="txt">
+                <span class="nm">{{ e.title }}</span>
+                <span class="tb muted">
+                  {{ e.type || e.table }}
+                  <template v-if="e.detail"> · {{ e.detail }}</template>
+                </span>
+              </span>
+              <span v-if="e.action === 'DELETE'" class="del" title="Eliminado en este update set">−</span>
+            </li>
+          </ul>
+        </template>
+
         <template v-else>
+          <button
+            v-if="updateSet"
+            class="ghost wide setbtn"
+            :class="{ on: showSet }"
+            @click="showSet = true"
+          >
+            📦 {{ updateSet.name || 'Update set' }}
+          </button>
           <div class="count muted">{{ filteredRoots.length }} de {{ roots.length }} registros principales</div>
           <ul class="list">
             <li
@@ -383,6 +436,11 @@ const statusDot = { changed: '●', added: '+', removed: '−', equal: '·' }
           :model-b="modelB"
           :label-a="nameA"
           :label-b="nameB"
+        />
+        <UpdateSetView
+          v-else-if="!comparing && showSet && updateSet"
+          :set="updateSet"
+          @open="openEntry"
         />
         <RecordDetail v-else-if="!comparing && current" :item="current" :model="modelA" @open="openRecord" />
         <div v-else class="muted nothing">Selecciona un registro en la lista.</div>
@@ -468,6 +526,10 @@ aside { border-right: 1px solid var(--line); background: var(--bg-2); overflow: 
   width: 100%; background: #0b0f19; color: var(--text); border: 1px solid var(--line);
   border-radius: 8px; padding: 7px 10px; font: inherit;
 }
+.setbtn { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.setbtn.on { border-color: var(--accent); color: var(--accent); }
+.setbtn .n { margin-left: auto; background: var(--bg-3); border-radius: 999px; padding: 0 7px; font-size: 11px; }
+.list .del { color: var(--danger); font-weight: 700; }
 .count { font-size: 11.5px; margin: 8px 2px; }
 .legend { display: flex; gap: 10px; font-size: 11px; margin: 0 2px 8px; flex-wrap: wrap; }
 .legend .changed { color: var(--logic); }
