@@ -25,14 +25,14 @@ const extra = computed(() => {
 </script>
 
 <template>
-  <div class="node" :class="{ logic: node.isLogic, closed: !open }">
+  <div class="node" :class="[node.kind, { closed: !open }]">
     <div class="head" @click="open = !open">
       <span class="caret">{{ open ? '▾' : '▸' }}</span>
       <span class="num">{{ number }}</span>
       <div class="titles">
         <div class="title">{{ node.title }}</div>
         <div class="sub muted">
-          <span class="chip">{{ node.isLogic ? 'Flow logic' : (/^sys_hub_step/.test(node.table) ? 'Step' : 'Action') }}</span>
+          <span class="chip" :class="node.kind">{{ node.kindLabel }}</span>
           <span v-if="node.typeName">{{ node.typeName }}</span>
           <span v-else-if="node.record.fields.name && node.record.fields.name !== node.title">{{ node.record.fields.name }}</span>
         </div>
@@ -97,6 +97,10 @@ const extra = computed(() => {
    horizontal o el contenido termina en una columna de una palabra de ancho */
 .node .node { padding: 10px 11px; }
 .node.logic { border-left-color: var(--logic); background: var(--bg-3); }
+/* un subflujo es otro flujo entero corriendo dentro de este: conviene verlo de lejos */
+.node.subflow { border-left-color: var(--subflow); background: rgba(195, 155, 240, .06); }
+.chip.subflow { color: var(--subflow); background: rgba(195, 155, 240, .14); }
+.chip.logic { color: var(--logic); background: rgba(240, 184, 102, .14); }
 .head { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
 .caret { color: var(--muted); font-size: 11px; line-height: 24px; }
 .node.closed { padding-bottom: 10px; }

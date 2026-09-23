@@ -492,6 +492,21 @@ function isTriggerish(record) {
   return /trigger/i.test(record.table)
 }
 
+const KIND_LABEL = { subflow: 'Subflow', logic: 'Flow logic', step: 'Step', action: 'Action' }
+
+/**
+ * Un nodo que llama a otro flujo se distingue porque referencia un subflow; el nombre de la
+ * tabla sirve de respaldo. Se decide una sola vez aquí para que el detalle y el diagrama
+ * pinten lo mismo.
+ */
+function nodeKind(record) {
+  if (record.fields.subflow || (record.displays && record.displays.subflow)) return 'subflow'
+  if (/sub_?flow/i.test(record.table)) return 'subflow'
+  if (/logic|block/i.test(record.table)) return 'logic'
+  if (/^sys_hub_step/i.test(record.table)) return 'step'
+  return 'action'
+}
+
 const TYPE_FIELDS = ['action_type', 'logic_definition', 'flow_logic', 'subflow', 'step_type', 'type']
 
 /**
@@ -511,16 +526,19 @@ function makeNode(record, model, consumed) {
   const type = typeLabel(record, model)
   const inputs = collectInputs(record, model, consumed)
   const named = record.fields.label || record.fields.name
-  const logic = /logic|block/i.test(record.table)
+  const kind = nodeKind(record)
   return {
     record,
     sysId: record.sysId,
     // el comentario es la etiqueta que el desarrollador le puso al paso en el editor
     title: named || type || record.fields.comment || displayName(record),
     typeName: named && type ? type : record.fields.comment || '',
+    kind,
+    kindLabel: KIND_LABEL[kind],
+    isSubflow: kind === 'subflow',
     table: record.table,
     order: num(record.fields.order),
-    isLogic: logic,
+    isLogic: kind === 'logic',
     inputs,
     children: []
   }

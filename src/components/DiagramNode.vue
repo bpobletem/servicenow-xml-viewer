@@ -16,14 +16,17 @@ const inputPreview = computed(() => props.node.inputs.slice(0, 3))
   <div class="wrap">
     <div
       class="box"
-      :class="{ logic: node.isLogic, active: selected === node.sysId }"
+      :class="[node.kind, { active: selected === node.sysId }]"
       @click="emit('select', node.sysId)"
     >
       <div class="top">
         <span class="num">{{ number }}</span>
         <span class="name">{{ node.title }}</span>
       </div>
-      <div class="type muted">{{ node.typeName || node.record.fields.name || node.table }}</div>
+      <div class="type">
+        <span class="kind">{{ node.kindLabel }}</span>
+        <span class="muted">{{ node.typeName || (node.record.fields.name !== node.title ? node.record.fields.name : '') }}</span>
+      </div>
       <ul v-if="inputPreview.length" class="ins">
         <li v-for="i in inputPreview" :key="i.name">
           <span class="ik">{{ i.name }}</span>
@@ -63,11 +66,18 @@ const inputPreview = computed(() => props.node.inputs.slice(0, 3))
 }
 .box:hover { transform: translateY(-1px); }
 .box.logic { border-top-color: var(--logic); }
+.box.subflow { border-top-color: var(--subflow); background: rgba(195, 155, 240, .07); }
+.box.logic .kind { color: var(--logic); }
+.box.subflow .kind { color: var(--subflow); }
+.kind {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--accent); margin-right: 6px;
+}
 .box.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(98, 182, 255, .25); }
 .top { display: flex; gap: 8px; align-items: center; }
 .num { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); }
 .name { font-weight: 600; font-size: 13.5px; }
-.type { font-size: 12px; margin-top: 2px; }
+.type { font-size: 12px; margin-top: 3px; display: flex; gap: 2px; align-items: baseline; flex-wrap: wrap; }
 .ins { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px; }
 .ins li { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; color: var(--muted); }
 .ik { font-family: ui-monospace, monospace; }

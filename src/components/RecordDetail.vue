@@ -108,7 +108,13 @@ function ioType(r) {
     </section>
 
     <section v-else-if="item.view === 'flow' && tab === 'diagrama'">
-      <FlowDiagram :flow="item" :selected="selected" @select="selected = $event" />
+      <FlowDiagram
+        :flow="item"
+        :model="model"
+        :selected="selected"
+        @select="selected = $event"
+        @open="emit('open', $event)"
+      />
     </section>
 
     <!-- ACTION -->
