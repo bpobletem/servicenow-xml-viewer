@@ -1,0 +1,5 @@
+node_modules
+dist
+
+# fixtures temporales con datos reales de clientes
+public/__*.xml

@@ -1,0 +1,59 @@
+:root {
+  --bg: #0f1420;
+  --bg-2: #151b2b;
+  --bg-3: #1c2436;
+  --line: #27324a;
+  --text: #e6ebf5;
+  --muted: #93a0bb;
+  --accent: #62b6ff;
+  --accent-2: #7ee0c0;
+  --logic: #f0b866;
+  --danger: #ff8b8b;
+  --radius: 10px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: #06101d; border-color: transparent; font-weight: 600; }
+button.ghost { background: transparent; }
+
+code, pre { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+.muted { color: var(--muted); }
+.chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+.pill-data {
+  background: rgba(98, 182, 255, 0.15);
+  border: 1px solid rgba(98, 182, 255, 0.4);
+  border-radius: 6px;
+  padding: 0 4px;
+  color: var(--accent);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
