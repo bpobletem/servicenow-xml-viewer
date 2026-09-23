@@ -261,12 +261,24 @@ export function inputsFor(record, model) {
     seen.add(name)
   }
 
-  for (const item of valueEntries(record.fields.values || record.fields.inputs || '')) {
-    if (seen.has(item.name)) continue
-    out.push({ ...item, origin: 'values', record: null })
-    seen.add(item.name)
+  // `values`, `inputs`, `trigger_inputs`, `subflow_inputs`… todos guardan lo mismo con
+  // distinto nombre según el tipo de nodo, así que se busca por forma en todos los campos.
+  for (const raw of Object.values(record.fields)) {
+    for (const item of valueEntries(raw)) {
+      if (seen.has(item.name)) continue
+      out.push({ ...item, origin: 'values', record: null })
+      seen.add(item.name)
+    }
   }
   return out.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// Un input siempre se identifica a sí mismo y trae un valor; con eso basta para
+// distinguir una lista de inputs de cualquier otro JSON guardado en un campo.
+function isInputShaped(item) {
+  return !!item && typeof item === 'object' && !Array.isArray(item) &&
+    (typeof item.name === 'string' || typeof item.label === 'string') &&
+    ('value' in item || 'displayValue' in item)
 }
 
 /**
@@ -276,14 +288,16 @@ export function inputsFor(record, model) {
  * las colecciones vacías, que sólo son ruido en pantalla.
  */
 function valueEntries(raw) {
+  if (typeof raw !== 'string' || raw.length < 2 || !/^[[{]/.test(raw.trim())) return []
   const json = tryJson(raw)
   if (!json || typeof json !== 'object') return []
 
   if (Array.isArray(json)) {
+    if (!json.every(isInputShaped)) return []
     const out = []
     for (const item of json) {
       if (!item || typeof item !== 'object') continue
-      const name = (item.parameter && item.parameter.label) || item.name
+      const name = (item.parameter && item.parameter.label) || item.label || item.name
       const value = item.displayValue || item.value
       if (!name || value == null || value === '') continue
       out.push({ name, value: typeof value === 'string' ? value : JSON.stringify(value, null, 2) })
@@ -370,7 +384,13 @@ function buildFlow(flow, model) {
     .filter(isTriggerish)
     .map((r) => {
       consumed.add(r.id)
-      return { record: r, title: displayName(r), inputs: collectInputs(r, model, consumed) }
+      return {
+        record: r,
+        title: displayName(r),
+        // "record_create" / "scheduled" / "inbound_email": el cuándo del disparador
+        typeName: humanize(r.fields.trigger_type || r.fields.type || ''),
+        inputs: collectInputs(r, model, consumed)
+      }
     })
 
   const nodeMap = new Map()
@@ -458,6 +478,13 @@ function firstRef(fields, names) {
     if (isSysId(v) || /^[0-9a-f-]{32,36}$/i.test(v)) return v
   }
   return ''
+}
+
+// snake_case → texto legible, para los valores que ServiceNow guarda como código interno.
+function humanize(value) {
+  if (!value) return ''
+  const text = value.replace(/[_-]+/g, ' ').trim()
+  return text.charAt(0).toUpperCase() + text.slice(1)
 }
 
 // Un disparador es lo que apunta al flow desde una tabla de triggers, sea cual sea su nombre.
@@ -570,4 +597,37 @@ function buildAction(action, model) {
     actionVars: other.map((io) => io.record),
     consumedIds: [...consumed]
   }
+}
+
+/* ------------------------------------------------- encoded queries */
+
+const QUERY_OP = /^(.+?)(>=|<=|!=|=|>|<|ISNOTEMPTY|ISEMPTY|NOT LIKE|NOTLIKE|LIKE|STARTSWITH|ENDSWITH|NOT IN|NOTIN|IN|BETWEEN|ANYTHING|SAMEAS|NSAMEAS|DYNAMIC|VALCHANGES|CHANGESFROM|CHANGESTO)(.*)$/
+
+/**
+ * Una condición de ServiceNow viaja como una sola línea con todo pegado
+ * (`state=1^short_description=algo^ORactive=true`). Se parte en condiciones para poder
+ * mostrar una por línea, que es como se lee en el constructor de condiciones.
+ */
+export function parseQuery(text) {
+  if (typeof text !== 'string' || !text.includes('^') || text.includes('\n')) return null
+
+  const out = []
+  for (const part of text.split('^')) {
+    if (!part) continue
+    // Los operadores van SIEMPRE en mayúscula y los nombres de columna en minúscula: es lo
+    // único que distingue `^ORactive=true` (un "o") de `^order_line_item=…` (una columna).
+    let join = ''
+    let body = part
+    const order = /^ORDERBY(DESC)?(.*)$/.exec(part)
+    if (order) { out.push({ join: '', field: order[2], op: '', value: order[1] ? 'orden descendente' : 'orden ascendente' }); continue }
+    if (part === 'EQ') continue
+    if (/^OR(?=\S)/.test(part)) { join = 'OR'; body = part.slice(2) }
+    else if (/^NQ(?=\S)/.test(part)) { join = 'NQ'; body = part.slice(2) }
+
+    const m = QUERY_OP.exec(body)
+    if (!m) return null
+    out.push({ join, field: m[1], op: m[2], value: m[3] })
+  }
+  // con una sola condición no hay nada que desplegar: se muestra tal cual
+  return out.length > 1 ? out : null
 }

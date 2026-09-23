@@ -82,6 +82,9 @@ const extra = computed(() => {
 
 <style scoped>
 .node {
+  /* las filas se adaptan al ancho de la tarjeta, no al de la ventana: a seis niveles de
+     anidamiento el espacio útil es una fracción de la pantalla */
+  container-type: inline-size;
   border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
   border-radius: var(--radius);
@@ -89,6 +92,10 @@ const extra = computed(() => {
   padding: 12px 14px;
   margin-bottom: 10px;
 }
+
+/* el anidamiento llega a seis o siete niveles: cada uno debe costar poco espacio
+   horizontal o el contenido termina en una columna de una palabra de ancho */
+.node .node { padding: 10px 11px; }
 .node.logic { border-left-color: var(--logic); background: var(--bg-3); }
 .head { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
 .caret { color: var(--muted); font-size: 11px; line-height: 24px; }
@@ -105,11 +112,12 @@ const extra = computed(() => {
 .tiny { padding: 2px 8px; font-size: 12px; }
 .rows { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
 .section { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; }
-.row { display: grid; grid-template-columns: 180px 1fr; gap: 12px; align-items: start; }
+.row { display: grid; grid-template-columns: minmax(0, 180px) minmax(0, 1fr); gap: 12px; align-items: start; }
 .k { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--muted); word-break: break-word; }
 .v { min-width: 0; }
 .empty { margin-top: 8px; font-size: 12.5px; }
 .raw { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
-.children { margin: 10px 0 0 18px; padding-left: 12px; border-left: 2px dashed var(--line); }
+.children { margin: 10px 0 0 0; padding-left: 10px; border-left: 2px dashed var(--line); }
+@container (max-width: 560px) { .row { grid-template-columns: 1fr; gap: 2px; } }
 @media (max-width: 760px) { .row { grid-template-columns: 1fr; gap: 2px; } }
 </style>

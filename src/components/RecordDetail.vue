@@ -62,26 +62,23 @@ function ioType(r) {
         <div v-for="i in item.flowInputs" :key="i.record.id" class="io">
           <span class="ioname">{{ ioLabel(i.record) }}</span>
           <span class="chip">{{ ioType(i.record) }}</span>
+          <span v-if="i.record.fields.mandatory === 'true'" class="req">obligatorio</span>
         </div>
       </Collapsible>
 
       <Collapsible title="Trigger" :count="item.triggers.length">
         <div v-if="!item.triggers.length" class="muted">No hay trigger en este XML.</div>
         <div v-for="t in item.triggers" :key="t.record.id" class="trigger">
-          <div class="tname">{{ t.title }}</div>
+          <div class="thead">
+            <span class="tname">{{ t.title }}</span>
+            <span v-if="t.typeName" class="chip">{{ t.typeName }}</span>
+          </div>
           <div class="rows">
-            <div v-for="f in ['table', 'condition', 'name', 'order']" :key="f">
-              <template v-if="t.record.fields[f]">
-                <div class="row">
-                  <span class="k">{{ f }}</span>
-                  <span class="v"><ValueCell :name="f" :value="t.record.fields[f]" :model="model" @open="emit('open', $event)" /></span>
-                </div>
-              </template>
-            </div>
             <div v-for="i in t.inputs" :key="i.name" class="row">
               <span class="k">{{ i.name }}</span>
               <span class="v"><ValueCell :name="i.name" :value="i.value" :model="model" @open="emit('open', $event)" /></span>
             </div>
+            <div v-if="!t.inputs.length" class="muted">Sin configuración registrada en el XML.</div>
           </div>
         </div>
       </Collapsible>
@@ -175,7 +172,12 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: v
 .io { display: flex; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px solid var(--line); }
 .ioname { font-family: ui-monospace, monospace; font-size: 13px; }
 .trigger { border: 1px solid var(--accent-2); border-radius: 10px; padding: 12px 14px; background: rgba(126, 224, 192, .07); }
-.tname { font-weight: 600; margin-bottom: 8px; }
+.thead { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+.tname { font-weight: 600; }
+.req {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--warn, #f0b86c);
+}
 .rows { display: flex; flex-direction: column; gap: 6px; }
 .row { display: grid; grid-template-columns: 180px 1fr; gap: 12px; align-items: start; }
 .k { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--muted); }
