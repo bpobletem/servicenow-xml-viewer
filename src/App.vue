@@ -210,13 +210,10 @@ const statusDot = { changed: '●', added: '+', removed: '−', equal: '·' }
 <template>
   <div class="app">
     <header class="top">
-      <div class="brand">
+      <button class="brand" type="button" title="Volver al inicio" @click="reset">
         <span class="logo">SN</span>
-        <div>
-          <div class="t">ServiceNow XML Viewer</div>
-          <div class="muted s">Update sets y registros → flows y actions legibles</div>
-        </div>
-      </div>
+        <span class="t">ServiceNow XML Viewer</span>
+      </button>
       <div class="acts">
         <template v-if="comparing">
           <span class="chip">{{ nameA }}</span>
@@ -498,13 +495,18 @@ const statusDot = { changed: '●', added: '+', removed: '−', equal: '·' }
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
   padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--bg-2);
 }
-.brand { display: flex; gap: 10px; align-items: center; }
+/* el nombre hace de botón de inicio: limpia y vuelve a la pantalla de carga */
+.brand {
+  display: flex; gap: 10px; align-items: center;
+  padding: 4px 8px 4px 4px; margin-left: -4px;
+  background: none; border: 1px solid transparent; border-radius: 10px;
+}
+.brand:hover { border-color: var(--line); background: var(--bg-3); }
 .logo {
   width: 32px; height: 32px; border-radius: 8px; background: var(--accent); color: #06101d;
   display: grid; place-items: center; font-weight: 800; font-size: 13px;
 }
-.t { font-weight: 600; }
-.s { font-size: 12px; }
+.t { font-weight: 600; font-size: 14px; }
 .acts { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .filebtn {
   background: var(--bg-3); border: 1px solid var(--line); border-radius: 8px;
