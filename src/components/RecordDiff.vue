@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import DiffValue from './DiffValue.vue'
 import NodeDiffRow from './NodeDiffRow.vue'
+import NodeDiffSplit from './NodeDiffSplit.vue'
 import { diffNodes, diffFields, realChanges } from '../lib/diff.js'
 import { displayName } from '../lib/model.js'
 import { provideCollapse } from '../lib/collapse.js'
@@ -23,10 +24,13 @@ const hasNodes = computed(() => {
 
 const tab = ref(hasNodes.value ? 'pasos' : 'campos')
 const onlyChanges = ref(true)
+// En un flujo lo que se compara es la secuencia, y eso sólo se lee en paralelo.
+const split = ref(true)
 watch(() => props.entry, () => { tab.value = hasNodes.value ? 'pasos' : 'campos' })
 const nodeRows = computed(() => (hasNodes.value ? diffNodes(props.entry.a, props.entry.b) : []))
+const UNCHANGED = new Set(['equal', 'moved'])
 const visibleNodeRows = computed(() =>
-  onlyChanges.value ? nodeRows.value.filter((r) => r.status !== 'equal') : nodeRows.value
+  onlyChanges.value ? nodeRows.value.filter((r) => !UNCHANGED.has(r.status)) : nodeRows.value
 )
 const fieldRows = computed(() =>
   props.entry.fieldDiff.filter((f) => (onlyChanges.value ? f.status !== 'equal' : true))
@@ -102,6 +106,10 @@ function flattenCount(item) {
         </nav>
         <div class="right">
           <template v-if="tab === 'pasos'">
+            <div class="seg">
+              <button class="ghost tiny" :class="{ on: split }" @click="split = true">Lado a lado</button>
+              <button class="ghost tiny" :class="{ on: !split }" @click="split = false">Lista</button>
+            </div>
             <button class="ghost tiny" @click="collapseAll()">Colapsar todo</button>
             <button class="ghost tiny" @click="expandAll()">Expandir todo</button>
           </template>
@@ -135,7 +143,13 @@ function flattenCount(item) {
           <p v-else class="m0">El XML no trae ningún registro que apunte a esta action.</p>
         </template>
       </div>
-      <NodeDiffRow v-for="(r, i) in visibleNodeRows" :key="i" :row="r" :model="modelB || modelA" />
+      <NodeDiffSplit
+        v-else-if="split"
+        :rows="nodeRows"
+        :only-changes="onlyChanges"
+        :model="modelB || modelA"
+      />
+      <NodeDiffRow v-else v-for="(r, i) in visibleNodeRows" :key="i" :row="r" :model="modelB || modelA" />
     </section>
 
     <section v-else-if="tab === 'campos'">
@@ -183,6 +197,8 @@ nav .on { border-color: var(--accent); color: var(--accent); }
   padding: 0 6px; font-size: 11px; color: var(--muted);
 }
 .right { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.seg { display: flex; gap: 4px; }
+.seg .on { border-color: var(--accent); color: var(--accent); }
 .tiny { padding: 2px 8px; font-size: 12px; }
 .toggle { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
 .sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; font-size: 11px; }

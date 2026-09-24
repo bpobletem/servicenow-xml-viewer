@@ -4,12 +4,12 @@ import DiffValue from './DiffValue.vue'
 import { useCollapseTarget } from '../lib/collapse.js'
 
 const props = defineProps({ row: Object, model: Object })
-const open = useCollapseTarget(props.row.status !== 'equal')
+const open = useCollapseTarget(props.row.status !== 'equal' && props.row.status !== 'moved')
 
 const changed = computed(() => props.row.inputs.filter((i) => i.status !== 'equal'))
 const fieldChanges = computed(() => props.row.fields || [])
 const shown = computed(() => (open.value ? props.row.inputs : []))
-const label = { equal: 'sin cambios', mod: 'modificado', add: 'agregado', del: 'eliminado' }
+const label = { equal: 'sin cambios', moved: 'renumerado', mod: 'modificado', add: 'agregado', del: 'eliminado' }
 </script>
 
 <template>
@@ -66,7 +66,7 @@ const label = { equal: 'sin cambios', mod: 'modificado', add: 'agregado', del: '
 .ndr.mod { border-left: 3px solid var(--logic); }
 .ndr.add { border-left: 3px solid #5ac98a; }
 .ndr.del { border-left: 3px solid var(--danger); }
-.ndr.equal { opacity: .72; }
+.ndr.equal, .ndr.moved { opacity: .72; }
 .head { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; }
 .head:hover { background: var(--bg-3); }
 .st {

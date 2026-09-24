@@ -289,9 +289,11 @@ export function diffNodes(itemA, itemB) {
       : []
     let status
     if (r.a && r.b) {
-      const same = !inputs.some((i) => i.status !== 'equal') &&
-        !fields.length && r.a.title === r.b.title && r.a.number === r.b.number
-      status = same ? 'equal' : 'mod'
+      const same = !inputs.some((i) => i.status !== 'equal') && !fields.length && r.a.title === r.b.title
+      // Borrar un paso renumera todos los que vienen después. Marcarlos como modificados
+      // ahogaría el cambio real entre cien filas que no cambiaron por dentro.
+      if (same) status = r.a.number === r.b.number ? 'equal' : 'moved'
+      else status = 'mod'
     } else {
       status = r.a ? 'del' : 'add'
     }
