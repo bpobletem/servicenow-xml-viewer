@@ -287,6 +287,14 @@ function isInputShaped(item) {
  * (dynamicInputs, outputsToAssign…). Se normaliza todo a pares nombre/valor y se descartan
  * las colecciones vacías, que sólo son ruido en pantalla.
  */
+/**
+ * ¿Este campo es el que guarda los inputs del paso? Sirve para no comparar dos veces lo
+ * mismo: los inputs ya se comparan uno a uno, con sus nombres legibles.
+ */
+export function carriesInputs(raw) {
+  return valueEntries(raw).length > 0
+}
+
 function valueEntries(raw) {
   if (typeof raw !== 'string' || raw.length < 2 || !/^[[{]/.test(raw.trim())) return []
   const json = tryJson(raw)

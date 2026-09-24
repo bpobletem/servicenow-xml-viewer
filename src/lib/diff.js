@@ -1,6 +1,7 @@
 // Alineación de secuencias (LCS) reutilizada para líneas de texto y para nodos de flow/action.
 
 import { isIgnored } from './ignored.js'
+import { carriesInputs } from './model.js'
 
 export function align(a, b, keyFn = (x) => x, { pairMods = false } = {}) {
   const ak = a.map(keyFn)
@@ -316,9 +317,18 @@ export function diffNodes(itemA, itemB, models) {
   return rows.map((r) => {
     const inputs = diffInputs(r.a, r.b)
     const all = r.a && r.b ? diffFields(r.a.record, r.b.record, models) : []
-    const fields = realChanges(all).filter((f) => f.name !== 'sys_id')
+    // El campo que guarda los inputs no se compara en crudo: junto a los valores lleva una
+    // copia de la definición del tipo de paso (etiquetas, opciones, pistas del formulario)
+    // que ServiceNow reescribe al actualizar el step type. Los inputs ya se comparan aparte,
+    // así que compararlo además sólo produce diferencias que no son del paso.
+    const fields = realChanges(all).filter(
+      (f) => f.name !== 'sys_id' && !carriesInputs(f.left) && !carriesInputs(f.right)
+    )
     // cuántos se dejaron fuera por ser internos, para poder decirlo en pantalla
-    const ignored = all.filter((f) => f.status !== 'equal' && f.noisy && f.name !== 'sys_id').length
+    const shown = new Set(fields.map((f) => f.name))
+    const ignored = all.filter(
+      (f) => f.status !== 'equal' && f.name !== 'sys_id' && !shown.has(f.name)
+    ).length
     let status
     if (r.a && r.b) {
       const same = !inputs.some((i) => i.status !== 'equal') && !fields.length && r.a.title === r.b.title
