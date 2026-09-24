@@ -27,7 +27,10 @@ const onlyChanges = ref(true)
 // En un flujo lo que se compara es la secuencia, y eso sólo se lee en paralelo.
 const split = ref(true)
 watch(() => props.entry, () => { tab.value = hasNodes.value ? 'pasos' : 'campos' })
-const nodeRows = computed(() => (hasNodes.value ? diffNodes(props.entry.a, props.entry.b) : []))
+const models = computed(() => ({ a: props.modelA, b: props.modelB }))
+const nodeRows = computed(() =>
+  hasNodes.value ? diffNodes(props.entry.a, props.entry.b, models.value) : []
+)
 const UNCHANGED = new Set(['equal', 'moved'])
 const visibleNodeRows = computed(() =>
   onlyChanges.value ? nodeRows.value.filter((r) => !UNCHANGED.has(r.status)) : nodeRows.value
@@ -43,7 +46,7 @@ const childRows = computed(() => {
       ...r,
       title: displayName(ref_),
       table: ref_.table,
-      changes: realChanges(diffFields(r.a, r.b))
+      changes: realChanges(diffFields(r.a, r.b, models.value))
     }
   })
 })

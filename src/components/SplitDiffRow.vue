@@ -64,6 +64,10 @@ const changes = computed(
       <div v-if="!row.inputs.length && !(row.fields || []).length" class="muted small">
         Sin inputs registrados en el XML.
       </div>
+      <p v-if="row.ignored" class="muted note">
+        {{ row.ignored }} campo(s) no se cuentan como cambio: auditoría (quién y cuándo tocó
+        el registro) o identificadores internos que ServiceNow regenera al publicar.
+      </p>
     </div>
   </div>
 </template>
@@ -139,6 +143,7 @@ const changes = computed(
 .irow:has(.dl) { grid-template-columns: 1fr; gap: 4px; }
 .section { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; }
 .small { font-size: 12.5px; }
+.note { margin: 2px 0 0; font-size: 11.5px; line-height: 1.45; }
 
 /* Dos columnas es el punto de esta vista: se mantienen mucho más abajo que el resto
    del layout, y el hueco nunca se esconde. */

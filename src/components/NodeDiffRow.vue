@@ -58,6 +58,10 @@ const label = { equal: 'sin cambios', moved: 'renumerado', mod: 'modificado', ad
       </div>
     </div>
     <div v-else-if="open" class="muted empty">Sin inputs.</div>
+    <p v-if="open && row.ignored" class="muted note">
+      {{ row.ignored }} campo(s) no se cuentan como cambio: auditoría (quién y cuándo tocó
+      el registro) o identificadores internos que ServiceNow regenera al publicar.
+    </p>
   </div>
 </template>
 
@@ -89,6 +93,7 @@ const label = { equal: 'sin cambios', moved: 'renumerado', mod: 'modificado', ad
 /* un diff línea a línea ocupa todo el ancho y deja la etiqueta arriba */
 .irow:has(.dl) { grid-template-columns: 1fr; gap: 4px; }
 .empty { padding: 0 12px 10px; font-size: 12.5px; }
+.note { margin: 0; padding: 0 12px 10px; font-size: 11.5px; line-height: 1.45; }
 .section { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; }
 .chip.tiny { font-size: 10px; padding: 0 6px; }
 @media (max-width: 900px) { .irow { grid-template-columns: 1fr; } .cols { grid-template-columns: 1fr; } }

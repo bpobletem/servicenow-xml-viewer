@@ -97,7 +97,33 @@ export const NOISY_FIELDS = new Set([
   'sys_mod_count', 'sys_update_name', 'sys_policy', 'sys_customer_update'
 ])
 
-export function diffFields(a, b) {
+const SYS_ID = /^[0-9a-f]{32}$/i
+
+/**
+ * ServiceNow regenera identificadores internos al publicar o al mover algo de instancia:
+ * el bloque de un paso, un snapshot, una versión. El id cambia y el registro es el mismo,
+ * así que contarlo como cambio entierra los cambios de verdad entre decenas de filas.
+ *
+ * Se reconoce por su forma, no por su nombre: los dos lados son sys_id, ninguno apunta a
+ * un registro presente en su propio XML, y el nombre legible que ServiceNow deja en
+ * display_value coincide (o no existe en ninguno de los dos).
+ */
+function isInternalId(name, left, right, a, b, models) {
+  if (name === 'sys_id' || !models) return false
+  const l = String(left ?? '').trim()
+  const r = String(right ?? '').trim()
+  if (!SYS_ID.test(l) || !SYS_ID.test(r)) return false
+
+  const dl = a && a.displays && a.displays[name]
+  const dr = b && b.displays && b.displays[name]
+  // si ServiceNow dice a qué apunta cada lado, eso manda sobre el id
+  if (dl || dr) return dl === dr
+
+  const known = (model, id) => !!(model && model.bySysId && model.bySysId.has(id))
+  return !known(models.a, l) && !known(models.b, r)
+}
+
+export function diffFields(a, b, models) {
   const fa = a ? a.fields : {}
   const fb = b ? b.fields : {}
   const names = [...new Set([...Object.keys(fa), ...Object.keys(fb)])].sort()
@@ -108,7 +134,9 @@ export function diffFields(a, b) {
     if (left === undefined && right !== undefined) status = 'added'
     else if (left !== undefined && right === undefined) status = 'removed'
     else if (String(left) !== String(right)) status = 'changed'
-    return { name, left, right, status, noisy: NOISY_FIELDS.has(name) }
+    const noisy = NOISY_FIELDS.has(name) ||
+      (status === 'changed' && isInternalId(name, left, right, a, b, models))
+    return { name, left, right, status, noisy }
   })
 }
 
@@ -155,10 +183,10 @@ function reconcileByName(pairs) {
   return pairs.filter((p) => !p.dead)
 }
 
-function statusOf(a, b) {
+function statusOf(a, b, models) {
   if (!b) return 'removed'
   if (!a) return 'added'
-  return realChanges(diffFields(a, b)).length ? 'changed' : 'equal'
+  return realChanges(diffFields(a, b, models)).length ? 'changed' : 'equal'
 }
 
 /**
@@ -167,13 +195,14 @@ function statusOf(a, b) {
  * registros hijos) y para el resto de registros sueltos.
  */
 export function buildComparison(modelA, modelB) {
+  const models = { a: modelA, b: modelB }
   const childrenOf = (model, root) => {
     const ids = new Set(root.consumedIds || [])
     return model.records.filter((r) => ids.has(r.id) && r.id !== root.id)
   }
 
   const makeEntry = (a, b, group, matchedByName = false) => {
-    const fieldDiff = diffFields(a, b)
+    const fieldDiff = diffFields(a, b, models)
     const changes = realChanges(fieldDiff)
     let children = { added: 0, removed: 0, changed: 0, rows: [] }
 
@@ -188,7 +217,7 @@ export function buildComparison(modelA, modelB) {
         else map.set(k, { a: null, b: r })
       }
       for (const pair of reconcileByName([...map.values()])) {
-        const st = statusOf(pair.a, pair.b)
+        const st = statusOf(pair.a, pair.b, models)
         if (st !== 'equal') children[st === 'added' ? 'added' : st === 'removed' ? 'removed' : 'changed']++
         children.rows.push({ ...pair, status: st })
       }
@@ -274,7 +303,7 @@ function reconcileNodeRows(rows, keyFn) {
   return rows.filter((r) => !r.dead)
 }
 
-export function diffNodes(itemA, itemB) {
+export function diffNodes(itemA, itemB, models) {
   const a = flattenNodes(itemA)
   const b = flattenNodes(itemB)
   let rows = align(a, b, (n) => n.sysId || normTitle(n))
@@ -284,9 +313,10 @@ export function diffNodes(itemA, itemB) {
 
   return rows.map((r) => {
     const inputs = diffInputs(r.a, r.b)
-    const fields = r.a && r.b
-      ? realChanges(diffFields(r.a.record, r.b.record)).filter((f) => f.name !== 'sys_id')
-      : []
+    const all = r.a && r.b ? diffFields(r.a.record, r.b.record, models) : []
+    const fields = realChanges(all).filter((f) => f.name !== 'sys_id')
+    // cuántos se dejaron fuera por ser internos, para poder decirlo en pantalla
+    const ignored = all.filter((f) => f.status !== 'equal' && f.noisy && f.name !== 'sys_id').length
     let status
     if (r.a && r.b) {
       const same = !inputs.some((i) => i.status !== 'equal') && !fields.length && r.a.title === r.b.title
@@ -297,7 +327,7 @@ export function diffNodes(itemA, itemB) {
     } else {
       status = r.a ? 'del' : 'add'
     }
-    return { ...r, status, inputs, fields, matchedByName: !!r.matchedByName }
+    return { ...r, status, inputs, fields, ignored, matchedByName: !!r.matchedByName }
   })
 }
 
