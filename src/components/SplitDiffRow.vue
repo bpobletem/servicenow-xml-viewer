@@ -27,7 +27,7 @@ const changes = computed(
           <span class="muted">{{ row.a.typeName }}</span>
         </div>
       </div>
-      <div v-else class="hole"></div>
+      <div v-else class="hole"><span>no existe en A</span></div>
     </div>
 
     <div class="pane right" @click="open = !open">
@@ -43,7 +43,7 @@ const changes = computed(
           <span class="muted">{{ row.b.typeName }}</span>
         </div>
       </div>
-      <div v-else class="hole"></div>
+      <div v-else class="hole"><span>no existe en B</span></div>
     </div>
 
     <div v-if="open" class="detail">
@@ -100,14 +100,22 @@ const changes = computed(
 .left .card.del { background: rgba(255, 120, 120, .13); border-left-color: var(--danger); }
 .right .card.add { background: rgba(80, 200, 130, .14); border-left-color: #5ac98a; }
 
-/* el hueco marca que ese paso no existe de ese lado */
+/* El hueco marca que el paso no existe de ese lado. Si no se ve, la columna parece
+   vacía y la comparación deja de leerse como dos lados. */
 .hole {
   height: 100%;
-  min-height: 40px;
-  border: 1px dashed var(--line);
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--muted);
   border-radius: 8px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--muted);
   background: repeating-linear-gradient(
-    -45deg, transparent, transparent 6px, rgba(255, 255, 255, .025) 6px, rgba(255, 255, 255, .025) 12px
+    -45deg, transparent, transparent 5px, rgba(147, 160, 187, .09) 5px, rgba(147, 160, 187, .09) 10px
   );
 }
 
@@ -132,8 +140,9 @@ const changes = computed(
 .section { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; }
 .small { font-size: 12.5px; }
 
-@media (max-width: 900px) {
-  .hole { display: none; }
+/* Dos columnas es el punto de esta vista: se mantienen mucho más abajo que el resto
+   del layout, y el hueco nunca se esconde. */
+@media (max-width: 620px) {
   .irow { grid-template-columns: 1fr; }
 }
 </style>
