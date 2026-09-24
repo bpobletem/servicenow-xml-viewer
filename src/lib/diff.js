@@ -1,5 +1,7 @@
 // Alineación de secuencias (LCS) reutilizada para líneas de texto y para nodos de flow/action.
 
+import { isIgnored } from './ignored.js'
+
 export function align(a, b, keyFn = (x) => x, { pairMods = false } = {}) {
   const ak = a.map(keyFn)
   const bk = b.map(keyFn)
@@ -134,7 +136,7 @@ export function diffFields(a, b, models) {
     if (left === undefined && right !== undefined) status = 'added'
     else if (left !== undefined && right === undefined) status = 'removed'
     else if (String(left) !== String(right)) status = 'changed'
-    const noisy = NOISY_FIELDS.has(name) ||
+    const noisy = NOISY_FIELDS.has(name) || isIgnored(name) ||
       (status === 'changed' && isInternalId(name, left, right, a, b, models))
     return { name, left, right, status, noisy }
   })

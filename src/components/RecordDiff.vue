@@ -6,6 +6,7 @@ import NodeDiffSplit from './NodeDiffSplit.vue'
 import { diffNodes, diffFields, realChanges } from '../lib/diff.js'
 import { displayName } from '../lib/model.js'
 import { provideCollapse } from '../lib/collapse.js'
+import { toggleIgnored } from '../lib/ignored.js'
 
 const props = defineProps({
   entry: Object,
@@ -161,6 +162,11 @@ function flattenCount(item) {
         <div class="fname">
           <span class="k">{{ f.name }}</span>
           <span v-if="f.noisy && f.status !== 'equal'" class="chip tiny">ruido</span>
+          <button
+            v-if="f.status !== 'equal' && !f.noisy"
+            class="ign" title="No contar este campo como cambio"
+            @click="toggleIgnored(f.name)"
+          >ignorar</button>
         </div>
         <DiffValue
           :name="f.name" :left="f.left" :right="f.right" :status="f.status"
@@ -204,6 +210,12 @@ nav .on { border-color: var(--accent); color: var(--accent); }
 .seg .on { border-color: var(--accent); color: var(--accent); }
 .tiny { padding: 2px 8px; font-size: 12px; }
 .toggle { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.ign {
+  padding: 0 6px; font-size: 10px; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); border: 1px solid var(--line); border-radius: 999px; background: none;
+}
+.ign:hover { color: var(--accent); border-color: var(--accent); }
 .sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; font-size: 11px; }
 .side { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .side.b { text-align: right; }

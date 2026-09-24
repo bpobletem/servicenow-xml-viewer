@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import DiffValue from './DiffValue.vue'
 import { useCollapseTarget } from '../lib/collapse.js'
+import { toggleIgnored } from '../lib/ignored.js'
 
 const props = defineProps({ row: Object, depth: Number, model: Object })
 
@@ -50,7 +51,10 @@ const changes = computed(
       <template v-if="(row.fields || []).length">
         <div class="section muted">Campos</div>
         <div v-for="f in row.fields" :key="'f' + f.name" class="irow" :class="f.status">
-          <span class="k">{{ f.name }}</span>
+          <span class="k">
+            {{ f.name }}
+            <button class="ign" title="No contar este campo como cambio" @click.stop="toggleIgnored(f.name)">ignorar</button>
+          </span>
           <DiffValue :name="f.name" :left="f.left" :right="f.right" :status="f.status" :model="model" />
         </div>
       </template>
@@ -141,6 +145,12 @@ const changes = computed(
 .irow .k { font-family: ui-monospace, monospace; font-size: 12.5px; color: var(--muted); word-break: break-word; }
 .irow.equal { opacity: .6; }
 .irow:has(.dl) { grid-template-columns: 1fr; gap: 4px; }
+.ign {
+  margin-left: 8px; padding: 0 6px; font-size: 10px; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); border: 1px solid var(--line); border-radius: 999px; background: none;
+}
+.ign:hover { color: var(--accent); border-color: var(--accent); }
 .section { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; }
 .small { font-size: 12.5px; }
 .note { margin: 2px 0 0; font-size: 11.5px; line-height: 1.45; }

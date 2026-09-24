@@ -4,6 +4,7 @@ import RecordDetail from './components/RecordDetail.vue'
 import RecordDiff from './components/RecordDiff.vue'
 import UpdateSetView from './components/UpdateSetView.vue'
 import { buildModel, genericView } from './lib/model.js'
+import { ignoredFields, toggleIgnored, clearIgnored } from './lib/ignored.js'
 import { buildComparison } from './lib/diff.js'
 import { SAMPLE_XML, SAMPLE_XML_V2 } from './lib/sample.js'
 
@@ -201,6 +202,8 @@ function reset() {
   error.value = ''; dual.value = false; showSet.value = false
 }
 
+const ignoredList = computed(() => [...ignoredFields.value].sort())
+
 const statusDot = { changed: '●', added: '+', removed: '−', equal: '·' }
 </script>
 
@@ -315,6 +318,16 @@ const statusDot = { changed: '●', added: '+', removed: '−', equal: '·' }
             <span class="changed">● {{ totals.changed }} modificados</span>
             <span class="added">+ {{ totals.added }} nuevos</span>
             <span class="removed">− {{ totals.removed }} eliminados</span>
+          </div>
+          <!-- vive aquí y no en el detalle: al ignorar un campo el registro puede dejar de
+               tener cambios y desaparecer de la lista, y hay que poder deshacerlo igual -->
+          <div v-if="ignoredList.length" class="ignored">
+            <div class="muted ihead">No se cuentan como cambio</div>
+            <button
+              v-for="n in ignoredList" :key="n" class="tag"
+              title="Volver a contarlo como cambio" @click="toggleIgnored(n)"
+            >{{ n }} <span class="x">×</span></button>
+            <button class="ghost tiny" @click="clearIgnored()">Restablecer</button>
           </div>
           <ul class="list">
             <li
@@ -531,6 +544,14 @@ aside { border-right: 1px solid var(--line); background: var(--bg-2); overflow: 
 .setbtn .n { margin-left: auto; background: var(--bg-3); border-radius: 999px; padding: 0 7px; font-size: 11px; }
 .list .del { color: var(--danger); font-weight: 700; }
 .count { font-size: 11.5px; margin: 8px 2px; }
+.ignored { margin: 8px 0 4px; display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.ihead { width: 100%; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
+.tag {
+  font-family: ui-monospace, monospace; font-size: 11px; padding: 1px 8px;
+  border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: var(--bg-3);
+}
+.tag:hover { color: var(--danger); border-color: var(--danger); }
+.tag .x { opacity: .7; }
 .legend { display: flex; gap: 10px; font-size: 11px; margin: 0 2px 8px; flex-wrap: wrap; }
 .legend .changed { color: var(--logic); }
 .legend .added { color: #7ee0a2; }

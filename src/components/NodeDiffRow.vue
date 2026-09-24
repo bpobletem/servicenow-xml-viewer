@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import DiffValue from './DiffValue.vue'
 import { useCollapseTarget } from '../lib/collapse.js'
+import { toggleIgnored } from '../lib/ignored.js'
 
 const props = defineProps({ row: Object, model: Object })
 const open = useCollapseTarget(props.row.status !== 'equal' && props.row.status !== 'moved')
@@ -45,7 +46,10 @@ const label = { equal: 'sin cambios', moved: 'renumerado', mod: 'modificado', ad
     <div v-if="open && fieldChanges.length" class="inputs">
       <div class="section muted">Campos del step</div>
       <div v-for="f in fieldChanges" :key="'f' + f.name" class="irow" :class="f.status">
-        <span class="k">{{ f.name }}</span>
+        <span class="k">
+          {{ f.name }}
+          <button class="ign" title="No contar este campo como cambio" @click.stop="toggleIgnored(f.name)">ignorar</button>
+        </span>
         <DiffValue :name="f.name" :left="f.left" :right="f.right" :status="f.status" :model="model" />
       </div>
     </div>
@@ -94,6 +98,12 @@ const label = { equal: 'sin cambios', moved: 'renumerado', mod: 'modificado', ad
 .irow:has(.dl) { grid-template-columns: 1fr; gap: 4px; }
 .empty { padding: 0 12px 10px; font-size: 12.5px; }
 .note { margin: 0; padding: 0 12px 10px; font-size: 11.5px; line-height: 1.45; }
+.ign {
+  margin-left: 8px; padding: 0 6px; font-size: 10px; line-height: 16px;
+  text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); border: 1px solid var(--line); border-radius: 999px; background: none;
+}
+.ign:hover { color: var(--accent); border-color: var(--accent); }
 .section { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; }
 .chip.tiny { font-size: 10px; padding: 0 6px; }
 @media (max-width: 900px) { .irow { grid-template-columns: 1fr; } .cols { grid-template-columns: 1fr; } }
