@@ -179,7 +179,7 @@ function reconcileByName(pairs) {
     if (bucket && bucket.length) {
       const q = bucket.shift()
       p.b = q.b
-      p.matchedByName = true
+      p.match = 'name'
       q.dead = true
     }
   }
@@ -197,14 +197,53 @@ function statusOf(a, b, models) {
  * Devuelve entradas para los registros principales (con el resumen de cambios en sus
  * registros hijos) y para el resto de registros sueltos.
  */
-export function buildComparison(modelA, modelB) {
+/**
+ * Emparejados a mano: un action duplicado no comparte sys_id ni nombre con el original,
+ * así que ninguna regla automática los junta. `forced` es { claveEnA: claveEnB }.
+ */
+function applyForced(pairs, forced) {
+  const keys = Object.keys(forced || {})
+  if (!keys.length) return pairs
+  const loose = new Map()
+  for (const p of pairs) {
+    if (p.a && !p.b) loose.set('a:' + pairKey(p.a), p)
+    else if (p.b && !p.a) loose.set('b:' + pairKey(p.b), p)
+  }
+  for (const ka of keys) {
+    const pa = loose.get('a:' + ka)
+    const pb = loose.get('b:' + forced[ka])
+    if (!pa || !pb || pa === pb) continue
+    pa.b = pb.b
+    pa.match = 'manual'
+    pb.dead = true
+  }
+  return pairs.filter((p) => !p.dead)
+}
+
+/**
+ * Si de cada lado sobra exactamente un registro del mismo tipo, casi siempre son el mismo
+ * con otro nombre (una copia, un renombrado). Se emparejan y se dice cómo se emparejaron,
+ * que es más útil que mostrarlos como uno borrado y otro nuevo sin relación.
+ */
+function pairLeftovers(pairs) {
+  const onlyA = pairs.filter((p) => p.a && !p.b)
+  const onlyB = pairs.filter((p) => p.b && !p.a)
+  if (onlyA.length !== 1 || onlyB.length !== 1) return pairs
+  if (onlyA[0].a.table !== onlyB[0].b.table) return pairs
+  onlyA[0].b = onlyB[0].b
+  onlyA[0].match = 'loose'
+  onlyB[0].dead = true
+  return pairs.filter((p) => !p.dead)
+}
+
+export function buildComparison(modelA, modelB, forced = {}) {
   const models = { a: modelA, b: modelB }
   const childrenOf = (model, root) => {
     const ids = new Set(root.consumedIds || [])
     return model.records.filter((r) => ids.has(r.id) && r.id !== root.id)
   }
 
-  const makeEntry = (a, b, group, matchedByName = false) => {
+  const makeEntry = (a, b, group, match = '') => {
     const fieldDiff = diffFields(a, b, models)
     const changes = realChanges(fieldDiff)
     let children = { added: 0, removed: 0, changed: 0, rows: [] }
@@ -237,7 +276,7 @@ export function buildComparison(modelA, modelB) {
       table: ref.table,
       kindLabel: ref.kindLabel || (ref.info && ref.info.label) || ref.table,
       icon: (ref.info && ref.info.icon) || '📄',
-      a, b, status, fieldDiff, matchedByName,
+      a, b, status, fieldDiff, match, matchedByName: match === 'name',
       changeCount: changes.length,
       children
     }
@@ -251,7 +290,12 @@ export function buildComparison(modelA, modelB) {
       if (map.has(k)) map.get(k).b = r
       else map.set(k, { a: null, b: r })
     }
-    return reconcileByName([...map.values()]).map((p) => makeEntry(p.a, p.b, group, !!p.matchedByName))
+    let pairs = reconcileByName([...map.values()])
+    pairs = applyForced(pairs, forced)
+    // el descarte sólo se aplica a los registros principales: entre los sueltos hay
+    // demasiados candidatos como para que adivinar sea útil
+    if (group === 'main') pairs = pairLeftovers(pairs)
+    return pairs.map((p) => makeEntry(p.a, p.b, group, p.match || (p.matchedByName ? 'name' : '')))
   }
 
   const main = build(modelA.roots, modelB.roots, 'main')
@@ -344,11 +388,14 @@ export function diffNodes(itemA, itemB, models) {
 }
 
 export function diffInputs(nodeA, nodeB) {
-  const toMap = (n) => new Map((n ? n.inputs : []).map((i) => [i.name, String(i.value ?? '')]))
-  const ma = toMap(nodeA)
-  const mb = toMap(nodeB)
+  const listOf = (n) => (n ? n.inputs : [])
+  const named = (list) => list.filter((i) => !i.unresolved)
+  const anon = (list) => list.filter((i) => i.unresolved)
+
+  const ma = new Map(named(listOf(nodeA)).map((i) => [i.name, String(i.value ?? '')]))
+  const mb = new Map(named(listOf(nodeB)).map((i) => [i.name, String(i.value ?? '')]))
   const names = [...new Set([...ma.keys(), ...mb.keys()])].sort()
-  return names.map((name) => {
+  const out = names.map((name) => {
     const left = ma.has(name) ? ma.get(name) : undefined
     const right = mb.has(name) ? mb.get(name) : undefined
     let status = 'equal'
@@ -357,4 +404,20 @@ export function diffInputs(nodeA, nodeB) {
     else if (left !== right) status = 'changed'
     return { name, left, right, status }
   })
+
+  // Los inputs cuya variable no viaja en el XML se identifican por un sys_id que cambia al
+  // duplicar el registro. Emparejarlos por nombre los mostraría todos como añadidos y
+  // borrados a la vez, así que se emparejan por su orden, que sí se conserva.
+  const aa = anon(listOf(nodeA))
+  const ab = anon(listOf(nodeB))
+  for (let i = 0; i < Math.max(aa.length, ab.length); i++) {
+    const l = aa[i] ? String(aa[i].value ?? '') : undefined
+    const r = ab[i] ? String(ab[i].value ?? '') : undefined
+    let status = 'equal'
+    if (l === undefined) status = 'added'
+    else if (r === undefined) status = 'removed'
+    else if (l !== r) status = 'changed'
+    out.push({ name: (aa[i] || ab[i]).name, left: l, right: r, status })
+  }
+  return out
 }

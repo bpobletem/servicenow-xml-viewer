@@ -57,9 +57,53 @@ function matches(list, fields) {
 }
 
 /* ------------------------------------------------------------ comparar */
+// Emparejados a mano, { claveEnA: claveEnB }. Se reinician al cambiar de XML.
+const forcedPairs = ref({})
+
 const comparison = computed(() =>
-  comparing.value ? buildComparison(modelA.value, modelB.value) : null
+  comparing.value ? buildComparison(modelA.value, modelB.value, forcedPairs.value) : null
 )
+
+/**
+ * Cuál de los dos XML se tocó después. Es la pregunta que uno se hace al comparar dos
+ * exports parecidos, y el dato ya viene en los registros (sys_updated_on).
+ */
+const newerSide = computed(() => {
+  if (!comparing.value) return ''
+  const a = modelA.value.updatedAt || ''
+  const b = modelB.value.updatedAt || ''
+  if (!a || !b || a === b) return ''
+  return a > b ? 'a' : 'b'
+})
+
+function updatedTitle(side) {
+  const model = side === 'a' ? modelA.value : modelB.value
+  const when = model && model.updatedAt
+  return when ? 'Última modificación en este XML: ' + when : 'Sin fecha de modificación en el XML'
+}
+
+// Candidatos para emparejar a mano: lo que quedó sin pareja del otro lado.
+const unpaired = computed(() => {
+  const all = comparison.value ? [...comparison.value.main, ...comparison.value.others] : []
+  return {
+    a: all.filter((e) => e.status === 'removed'),
+    b: all.filter((e) => e.status === 'added')
+  }
+})
+
+function pairWith(entry, otherKey) {
+  const next = { ...forcedPairs.value }
+  if (entry.status === 'removed') next[entry.key] = otherKey
+  else next[otherKey] = entry.key
+  forcedPairs.value = next
+  selectedKey.value = entry.status === 'removed' ? entry.key : otherKey
+}
+
+function unpair(entry) {
+  const next = { ...forcedPairs.value }
+  delete next[entry.key]
+  forcedPairs.value = next
+}
 const cmpMain = computed(() => visibleEntries(comparison.value ? comparison.value.main : []))
 const cmpOthers = computed(() => visibleEntries(comparison.value ? comparison.value.others : []))
 const cmpCurrent = computed(() => {
@@ -98,6 +142,7 @@ async function parse(text, which) {
   } else {
     modelB.value = model
   }
+  forcedPairs.value = {}
   return model
 }
 
@@ -128,6 +173,7 @@ async function compareNow() {
 }
 
 function exitCompare() {
+  forcedPairs.value = {}
   modelB.value = null
   xmlB.value = ''
   nameB.value = 'XML B'
@@ -200,6 +246,7 @@ function reset() {
   nameA.value = 'XML A'; nameB.value = 'XML B'
   adHoc.value = null; selectedId.value = ''; selectedKey.value = ''
   error.value = ''; dual.value = false; showSet.value = false
+  forcedPairs.value = {}
 }
 
 const ignoredList = computed(() => [...ignoredFields.value].sort())
@@ -216,9 +263,15 @@ const statusDot = { changed: '●', added: '+', removed: '−', equal: '·' }
       </button>
       <div class="acts">
         <template v-if="comparing">
-          <span class="chip">{{ nameA }}</span>
+          <span class="sidename" :class="{ newer: newerSide === 'a' }">
+            <input v-model="nameA" :title="updatedTitle('a')" spellcheck="false" />
+            <em v-if="newerSide === 'a'" :title="updatedTitle('a')">más reciente</em>
+          </span>
           <span class="muted">vs</span>
-          <span class="chip">{{ nameB }}</span>
+          <span class="sidename" :class="{ newer: newerSide === 'b' }">
+            <input v-model="nameB" :title="updatedTitle('b')" spellcheck="false" />
+            <em v-if="newerSide === 'b'" :title="updatedTitle('b')">más reciente</em>
+          </span>
           <button class="ghost" @click="swapSides">Intercambiar</button>
           <button class="ghost" @click="exitCompare">Salir de comparación</button>
         </template>
@@ -446,6 +499,9 @@ const statusDot = { changed: '●', added: '+', removed: '−', equal: '·' }
           :model-b="modelB"
           :label-a="nameA"
           :label-b="nameB"
+          :candidates="cmpCurrent.status === 'removed' ? unpaired.b : unpaired.a"
+          @pair="pairWith(cmpCurrent, $event)"
+          @unpair="unpair(cmpCurrent)"
         />
         <UpdateSetView
           v-else-if="!comparing && showSet && updateSet"
@@ -546,6 +602,18 @@ aside { border-right: 1px solid var(--line); background: var(--bg-2); overflow: 
 .setbtn .n { margin-left: auto; background: var(--bg-3); border-radius: 999px; padding: 0 7px; font-size: 11px; }
 .list .del { color: var(--danger); font-weight: 700; }
 .count { font-size: 11.5px; margin: 8px 2px; }
+.sidename { display: inline-flex; gap: 6px; align-items: center; }
+.sidename input {
+  width: 13ch; padding: 3px 9px; font-size: 12px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg-3); color: var(--fg, inherit);
+}
+.sidename input:focus { outline: none; border-color: var(--accent); width: 20ch; }
+.sidename.newer input { border-color: var(--accent-2); }
+.sidename em {
+  font-style: normal; font-size: 10px; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--accent-2);
+}
 .ignored { margin: 8px 0 4px; display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
 .ihead { width: 100%; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
 .tag {

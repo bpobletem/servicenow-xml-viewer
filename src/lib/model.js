@@ -51,15 +51,22 @@ export async function buildModel(text) {
     (r) => !rootIds.has(r.id) && !claimed.has(r.id) && !METADATA_TABLES.has(r.table)
   )
 
+  // Lo más nuevo que toca este XML. Con formato 'YYYY-MM-DD HH:MM:SS' basta comparar
+  // como texto, y sirve para decir cuál de los dos lados de una comparación es posterior.
+  const updatedAt = records.reduce((max, r) => {
+    const v = (r.fields.sys_updated_on || '').trim()
+    return v > max ? v : max
+  }, '')
+
   const updateSet = buildUpdateSet(doc, records, roots)
 
   // lo que ya se lista como entrada del update set no vuelve a aparecer como suelto
   if (updateSet && !updateSet.entriesMissing) {
     const listed = new Set(updateSet.entries.map((e) => e.recordId).filter(Boolean))
-    return { ...model, roots, orphans: orphans.filter((r) => !listed.has(r.id)), updateSet }
+    return { ...model, roots, orphans: orphans.filter((r) => !listed.has(r.id)), updateSet, updatedAt }
   }
 
-  return { ...model, roots, orphans, updateSet }
+  return { ...model, roots, orphans, updateSet, updatedAt }
 }
 
 /**
@@ -257,7 +264,14 @@ export function inputsFor(record, model) {
     const name = varRef
       ? (varRef.record.fields.element || varRef.record.fields.column_label || varRef.label)
       : unresolvedName(child.fields.variable)
-    out.push({ name, value: child.fields.value ?? '', origin: 'sys_variable_value', record: child })
+    out.push({
+      name,
+      value: child.fields.value ?? '',
+      origin: 'sys_variable_value',
+      // sin la definición no hay nombre estable: el sys_id se regenera al duplicar
+      unresolved: !varRef,
+      record: child
+    })
     seen.add(name)
   }
 

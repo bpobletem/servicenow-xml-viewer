@@ -13,8 +13,11 @@ const props = defineProps({
   modelA: Object,
   modelB: Object,
   labelA: { type: String, default: 'XML A' },
-  labelB: { type: String, default: 'XML B' }
+  labelB: { type: String, default: 'XML B' },
+  candidates: { type: Array, default: () => [] }
 })
+const emit = defineEmits(['pair', 'unpair'])
+const pairTo = ref('')
 
 const { collapseAll, expandAll } = provideCollapse()
 
@@ -59,6 +62,16 @@ const nodeStats = computed(() => ({
 }))
 
 const statusLabel = { changed: 'modificado', added: 'solo en B', removed: 'solo en A', equal: 'sin cambios' }
+const matchLabel = {
+  name: '≈ emparejado por nombre',
+  loose: '≈ emparejado por descarte',
+  manual: '≈ emparejado a mano'
+}
+const matchHelp = {
+  name: 'Los sys_id no coinciden entre los dos XML; se emparejó por nombre',
+  loose: 'Era el único registro de su tipo sin pareja en cada lado, así que se compararon entre sí',
+  manual: 'Los emparejaste tú'
+}
 
 // Diagnóstico: qué tablas relacionadas trae cada lado. Sirve cuando no aparecen steps.
 const relatedTables = computed(() => {
@@ -84,9 +97,10 @@ function flattenCount(item) {
         <span class="chip" :class="entry.status">{{ statusLabel[entry.status] }}</span>
         <span class="chip">{{ entry.kindLabel }}</span>
         <span class="chip">{{ entry.table }}</span>
-        <span v-if="entry.matchedByName" class="chip" title="Los sys_id no coinciden entre los dos XML; se emparejó por nombre">
-          ≈ emparejado por nombre
-        </span>
+        <span v-if="entry.match" class="chip" :title="matchHelp[entry.match]">{{ matchLabel[entry.match] }}</span>
+        <button v-if="entry.match === 'manual' || entry.match === 'loose'" class="ghost tiny" @click="emit('unpair')">
+          Deshacer emparejado
+        </button>
       </div>
       <h1>{{ entry.title }}</h1>
       <div class="bar">
@@ -122,6 +136,18 @@ function flattenCount(item) {
             Solo cambios
           </label>
         </div>
+      </div>
+      <div v-if="(entry.status === 'added' || entry.status === 'removed') && candidates.length" class="pairbox">
+        <span class="muted">
+          Este registro sólo está en {{ entry.status === 'removed' ? labelA : labelB }}.
+          Si en {{ entry.status === 'removed' ? labelB : labelA }} es otro registro con otro nombre
+          (una copia, un renombrado), empareja los dos para verlos lado a lado:
+        </span>
+        <select v-model="pairTo">
+          <option value="">Comparar con…</option>
+          <option v-for="c in candidates" :key="c.key" :value="c.key">{{ c.title }} · {{ c.table }}</option>
+        </select>
+        <button class="ghost tiny" :disabled="!pairTo" @click="emit('pair', pairTo)">Comparar</button>
       </div>
       <div class="sides">
         <span class="side a">◂ {{ labelA }}</span>
@@ -216,6 +242,15 @@ nav .on { border-color: var(--accent); color: var(--accent); }
   color: var(--muted); border: 1px solid var(--line); border-radius: 999px; background: none;
 }
 .ign:hover { color: var(--accent); border-color: var(--accent); }
+.pairbox {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-top: 10px; padding: 10px 12px; font-size: 12.5px;
+  border: 1px dashed var(--line); border-radius: 10px; background: var(--bg-2);
+}
+.pairbox select {
+  padding: 4px 8px; font-size: 12px; max-width: 320px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg-3); color: inherit;
+}
 .sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; font-size: 11px; }
 .side { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .side.b { text-align: right; }
